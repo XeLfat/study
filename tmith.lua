@@ -55,5 +55,6 @@ if Tutorial.Visible then
     vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait(0.1)
     vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    task.wait(2)
     for i = 1, 2 do BuySeed("Cactus Seed") end
 end
