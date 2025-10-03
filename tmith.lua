@@ -53,14 +53,12 @@ if Tutorial.Visible then
     FindGeorge()
     Walk(GeorgePos)
     vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-    -- task.wait(0.1)
-    -- vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    task.wait(0.1)
+    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait(2)
     BuySeed("Cactus Seed")
-    print("1")
     task.wait(1)
     BuySeed("Cactus Seed")
-    print("2")
 end
 
 -- 📌 สรุปสั้น ๆ
