@@ -53,8 +53,8 @@ if Tutorial.Visible then
     FindGeorge()
     Walk(GeorgePos)
     vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-    task.wait(0.1)
-    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    -- task.wait(0.1)
+    -- vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait(2)
     BuySeed("Cactus Seed")
     print("1")
@@ -68,3 +68,5 @@ end
 -- git commit -m "ข้อความ"
 -- git push origin main
 -- loadstring(game:HttpGet("https://raw.githubusercontent.com/XeLfat/study/refs/heads/main/tmith.lua"))()
+-- https://pastebin.com/raw/CX2pQcmE
+-- loadstring(game:HttpGet("https://pastebin.com/raw/CX2pQcmE"))()
