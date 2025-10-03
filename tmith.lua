@@ -58,3 +58,8 @@ if Tutorial.Visible then
     task.wait(2)
     for i = 1, 2 do BuySeed("Cactus Seed") end
 end
+
+-- 📌 สรุปสั้น ๆ
+-- git add .
+-- git commit -m "ข้อความ"
+-- git push origin main
