@@ -57,9 +57,10 @@ if Tutorial.Visible then
     vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait(2)
     BuySeed("Cactus Seed")
+    print("1")
     task.wait(1)
     BuySeed("Cactus Seed")
-
+    print("2")
 end
 
 -- 📌 สรุปสั้น ๆ
