@@ -56,10 +56,15 @@ if Tutorial.Visible then
     task.wait(0.1)
     vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait(2)
-    for i = 1, 2 do BuySeed("Cactus Seed") end
+    for i = 1, 2 do
+        print(i)
+        BuySeed("Cactus Seed")
+        task.wait(1)
+    end
 end
 
 -- 📌 สรุปสั้น ๆ
 -- git add .
 -- git commit -m "ข้อความ"
 -- git push origin main
+-- loadstring(game:HttpGet("https://raw.githubusercontent.com/XeLfat/study/refs/heads/main/tmith.lua"))()
