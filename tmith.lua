@@ -268,7 +268,7 @@ local function brainrodspart(plot)
     for _, brainrot in ipairs(brainrots:GetChildren()) do
         local Enabled = brainrot:GetAttribute("Enabled")
         if Enabled then
-            BrainrotPos = brainrot.CFrame
+            BrainrotPos = brainrot.Position
         end
     end
 end
@@ -327,7 +327,7 @@ if Tutorial.Visible then
             warn("⚠️ Tile นี้วางไม่ได้ ข้าม")
         end
     end
-    task.wait(1)
+    task.wait(7)
     local brainrod = "Noobini Bananini"
     local tool = EquipTool(brainrod)
     if tool then
