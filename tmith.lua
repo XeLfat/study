@@ -75,11 +75,15 @@ local function getGrassTiles(plot)
         if grassFolder then
             for _, inst in ipairs(grassFolder:GetChildren()) do
                 if inst:IsA("BasePart") then
-                    table.insert(tiles, inst)
+                    local CanPlace = inst:GetAttribute("CanPlace")
+                    if CanPlace then
+                        table.insert(tiles, inst)
+                    end
                 end
             end
         end
     end
+    print("[GrassTiles] พบ", #tiles, "บล็อกที่ปลูกได้")
     return tiles
 end
 
