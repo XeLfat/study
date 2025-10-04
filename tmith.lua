@@ -281,6 +281,7 @@ if Tutorial.Visible then
     local hrp = (plr.Character or plr.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
     local plpos = hrp.Position
     Findplot()
+    print(currentPlot)
     FindGeorge()
     Walk(GeorgePos)
     vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
