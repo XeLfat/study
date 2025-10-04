@@ -307,7 +307,16 @@ local function plant(tile, seed)
 
     print(string.format("🌱 ปลูก %s (%s) ที่ตำแหน่ง (%.1f, %.1f, %.1f)", plantitem, id, spot.X, spot.Y, spot.Z))
     game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
-
+    sendEmbed(
+        "🌵 ปลูกสำเร็จ!",
+        string.format("ปลูก **%s** แล้วที่ Tile: `%s`", seed:match("^(%S+)"), tile:GetFullName()),
+        0x57F287,
+        {
+            {name = "ตำแหน่ง", value = string.format("`%.1f, %.1f, %.1f`", spot.X, spot.Y, spot.Z), inline = true},
+            {name = "ID", value = id, inline = true}
+        },
+        "AutoPlanter"
+    )
     -- แคชตำแหน่งไว้กันสุ่มซ้ำในรอบเดียวกัน
     table.insert(planted, {position = spot, size = 1})
 end
@@ -334,6 +343,7 @@ if Tutorial.Visible then
     if not character then
         return
     end
+    sendText("เริ่ม Tutorial แล้ว!", "AutoPlanter Bot")
 
     local hrp = (plr.Character or plr.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
     local plpos = hrp.Position
