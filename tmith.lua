@@ -163,31 +163,35 @@ local function plant(tile, seed)
     game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
 end
 
-local function EquipTool(toolName)
-    local backpack = plr:FindFirstChild("Backpack")
+local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่น "Cactus Seed"
     local character = plr.Character or plr.CharacterAdded:Wait()
 
-    if not backpack then
-        warn("❌ Backpack ไม่พบ")
-        return nil
+    -- 1) ถ้าถืออยู่แล้ว ให้ใช้ต่อได้เลย
+    for _, tool in ipairs(character:GetChildren()) do
+        if tool:IsA("Tool") and tool:GetAttribute("ItemName") == toolItemName then
+            return tool
+        end
     end
 
-    for _, tool in ipairs(backpack:GetChildren()) do
-        if tool:IsA("Tool") then
-            local itemName = tool:GetAttribute("ItemName")
-            if itemName == toolName then
-                -- ถือขึ้นมือ
+    -- 2) ถ้าอยู่ใน Backpack ให้ย้ายมาถือ
+    local backpack = plr:FindFirstChild("Backpack")
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and tool:GetAttribute("ItemName") == toolItemName then
                 tool.Parent = character
-                print("🪓 ถือ Tool:", tool.Name)
-
-                -- รอให้ถือสำเร็จ
-                task.wait(0.3)
+                -- รอให้ถือสำเร็จจริง
+                for _ = 1, 15 do
+                    if character:FindFirstChild(tool.Name) then
+                        break
+                    end
+                    task.wait(0.05)
+                end
                 return tool
             end
         end
     end
 
-    warn("❌ ไม่พบ Tool ชื่อ:", toolName)
+    warn("❌ ไม่พบ Tool สำหรับ:", toolItemName)
     return nil
 end
 
@@ -216,33 +220,14 @@ if Tutorial.Visible then
         local tiles = getGrassTiles(currentPlot)
         if #tiles > 0 then
             local t = pickEmptyThenAny(tiles)
-
-            -- ถ้า tile นี้วางไม่ได้ ให้ข้ามไปหาตัวถัดไป
-            if not t:GetAttribute("CanPlace") then
-                warn("❌ Tile นี้วางไม่ได้ ข้าม")
-            else
+            if t:GetAttribute("CanPlace") then
                 local tool = EquipTool("Cactus Seed")
                 if tool then
-                    local char = plr.Character or plr.CharacterAdded:Wait()
+                    -- กันกรณี Uses เพิ่งลด รอเซิร์ฟอัปเดตเล็กน้อย
+                    task.wait(0.1)
 
-                    -- รอให้ถือสำเร็จจริง
-                    for _ = 1, 15 do
-                        if char:FindFirstChild(tool.Name) then
-                            break
-                        end
-                        task.wait(0.05)
-                    end
-
-                    -- กันกรณี Uses หมด
-                    local uses = tool:GetAttribute("Uses")
-                    if uses and uses <= 0 then
-                        warn("⚠️ Seed ใช้หมดแล้ว ข้าม")
-                    else
-                        plant(t, "Cactus Seed")
-                        task.wait(PLANT_DELAY + 0.2)
-                    end
-                else
-                    warn("⚠️ ไม่มี Cactus Seed ให้ถือ")
+                    plant(t, "Cactus Seed") -- ใช้ findLatestCactusId ดึง ID ตามที่ทำไว้แล้ว
+                    task.wait(PLANT_DELAY + 0.15)
                 end
             end
         end
