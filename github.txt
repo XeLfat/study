@@ -24,3 +24,7 @@ $REPO = "study"
 $FILE = "tmith.lua"
 $SHA  = git rev-parse HEAD
 Write-Output "https://raw.githubusercontent.com/$USER/$REPO/$SHA/$FILE"
+
+แก้
+git pull origin main --rebase
+git push origin main
