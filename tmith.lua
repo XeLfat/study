@@ -87,14 +87,55 @@ local function getGrassTiles(plot)
     return tiles
 end
 
-local function randomCFrameOnTop(part)
-    local margin = 0.15
-    local halfX = part.Size.X * (0.5 - margin)
-    local halfZ = part.Size.Z * (0.5 - margin)
+local function randomPointOnTile(tile, margin)
+    margin = margin or 0.15
+    local halfX = tile.Size.X * (0.5 - margin)
+    local halfZ = tile.Size.Z * (0.5 - margin)
     local ox = (math.random() * 2 - 1) * halfX
     local oz = (math.random() * 2 - 1) * halfZ
-    local pos = (part.CFrame * CFrame.new(ox, part.Size.Y / 2, oz)).Position
-    return CFrame.new(pos)
+    local pos = (tile.CFrame * CFrame.new(ox, tile.Size.Y / 2, oz)).Position
+    return pos
+end
+
+local function getExistingPlants(plot)
+    local plantsFolder = plot:FindFirstChild("Plants")
+    local plants = {}
+    if not plantsFolder then
+        return plants
+    end
+    for _, p in ipairs(plantsFolder:GetChildren()) do
+        if p:GetAttribute("Owner") == plr.Name then
+            local pos = p:GetAttribute("Position")
+            local size = p:GetAttribute("Size") or 1
+            if typeof(pos) == "Vector3" then
+                table.insert(plants, {position = pos, size = size})
+            end
+        end
+    end
+    return plants
+end
+
+local function isSpotFree(point, plants, minGap)
+    minGap = minGap or 0.6 -- เว้นระยะขั้นต่ำ (ปรับได้)
+    for _, pl in ipairs(plants) do
+        -- ใช้ size ของพืชช่วยกันชน (เผื่อบางชนิดใหญ่)
+        local needGap = math.max(minGap, (pl.size or 1) * 0.5)
+        if (point - pl.position).Magnitude <= needGap then
+            return false
+        end
+    end
+    return true
+end
+
+local function pickRandomFreePoint(tile, plants, tries, margin, minGap)
+    tries = tries or 12
+    for _ = 1, tries do
+        local pt = randomPointOnTile(tile, margin)
+        if isSpotFree(pt, plants, minGap) then
+            return pt
+        end
+    end
+    return nil -- ไม่เจอจุดว่างภายในจำนวนครั้งที่กำหนด
 end
 
 local function isTileEmpty(tile)
@@ -150,7 +191,7 @@ local function plant(tile, seed)
         warn("No dynamic ID found for Cactus; cannot place.")
         return
     end
-    local cf = randomCFrameOnTop(tile)
+    local cf = randomPointOnTile(tile)
     -- ทำ payload แบบเดียวกับที่ RemoteSpy จับได้
     local args = {
         {
@@ -218,17 +259,32 @@ if Tutorial.Visible then
     task.wait(2)
     for i = 1, 2 do
         local tiles = getGrassTiles(currentPlot)
-        if #tiles > 0 then
-            local t = pickEmptyThenAny(tiles)
-            if t:GetAttribute("CanPlace") then
+        if #tiles == 0 then
+            break
+        end
+
+        local planted = getExistingPlants(currentPlot) -- พืชที่มีอยู่ตอนนี้
+        local t = pickEmptyThenAny(tiles) -- ใช้ของเดิมเลือก tile ที่ว่าง
+
+        if t and t:GetAttribute("CanPlace") then
+            -- หา “จุดสุ่มที่ว่างจริง” บน tile นี้
+            local spot = pickRandomFreePoint(t, planted, 12, 0.15, 0.6)
+            if spot then
                 local tool = EquipTool("Cactus Seed")
                 if tool then
-                    -- กันกรณี Uses เพิ่งลด รอเซิร์ฟอัปเดตเล็กน้อย
-                    task.wait(0.1)
+                    local id = findLatestCactusId("Cactus Seed")
+                    if id then
+                        local cf = CFrame.new(spot)
+                        local args = {{ID = id, CFrame = cf, Item = "Cactus", Floor = t}}
+                        RS.Remotes.PlaceItem:FireServer(unpack(args))
 
-                    plant(t, "Cactus Seed") -- ใช้ findLatestCactusId ดึง ID ตามที่ทำไว้แล้ว
-                    task.wait(PLANT_DELAY + 0.15)
+                        -- อัปเดตแคชฝั่งเรา กันสุ่มไปทับในรอบเดียวกัน
+                        table.insert(planted, {position = spot, size = 1})
+                        task.wait(PLANT_DELAY + 0.1)
+                    end
                 end
+            else
+                warn("หา spot ว่างบน tile นี้ไม่เจอ ลอง tile อื่น")
             end
         end
     end
