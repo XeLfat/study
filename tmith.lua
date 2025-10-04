@@ -2,7 +2,7 @@
 local ITEM_NAME = "Cactus"
 local ITEM_ID = "c67c7669-6c8b-4ecb-9c67-44aba3c7a3d6"
 local PLANT_DELAY = 1.2
-
+local WEBHOOK_URL = "ใส่_URL_ของคุณที่นี่"
 -- ตัวแปร
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
@@ -16,6 +16,57 @@ local vim = game:GetService("VirtualInputManager")
 local currentPlot = nil
 local GeorgePos = nil
 local BrainrotPos = nil
+local HttpService = game:GetService("HttpService")
+
+local function sendWebhook(url, payloadTable)
+    local json = HttpService:JSONEncode(payloadTable)
+    local headers = {["Content-Type"] = "application/json"}
+
+    -- ตัวรันยอดนิยม
+    local req = getgenv().http_request or request or (syn and syn.request) or http_request
+    if req then
+        local res = req({Url = url, Method = "POST", Headers = headers, Body = json})
+        return res and res.StatusCode or 0, res and res.Body or ""
+    else
+        -- สำรองด้วย HttpService (ต้องเปิด HTTP ในเกม/สตูดิโอ)
+        local ok, body =
+            pcall(
+            function()
+                return HttpService:PostAsync(url, json, Enum.HttpContentType.ApplicationJson)
+            end
+        )
+        return ok and 200 or 0, body or ""
+    end
+end
+
+-- ==== HELPERS ====
+-- ข้อความธรรมดา
+local function sendText(content, username, avatar_url)
+    local payload = {
+        content = content,
+        username = username,
+        avatar_url = avatar_url
+    }
+    return sendWebhook(WEBHOOK_URL, payload)
+end
+
+-- ข้อความแบบ embed
+local function sendEmbed(title, desc, color, fields, username, avatar_url)
+    local payload = {
+        username = username,
+        avatar_url = avatar_url,
+        embeds = {
+            {
+                title = title,
+                description = desc,
+                color = color or 0x57F287, -- เขียวอ่อน
+                fields = fields, -- {{name="Tile", value="Row 1 / Grass 3", inline=true}, ...}
+                timestamp = DateTime.now():ToIsoDate()
+            }
+        }
+    }
+    return sendWebhook(WEBHOOK_URL, payload)
+end
 
 --Functions
 local function Walk(targetPosition, timeout)
@@ -354,4 +405,5 @@ if Tutorial.Visible then
     vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
     task.wait(1)
     Walk(plpos)
+    sendText("ผ่าน Tutorial แล้ว!", "AutoPlanter Bot")
 end
