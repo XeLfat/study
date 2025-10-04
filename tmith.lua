@@ -118,15 +118,45 @@ local function pickEmptyThenAny(tiles)
     return list[math.random(1, #list)]
 end
 
-local function plant(tile)
-    PlaceItem:FireServer(
+local function findLatestCactusId(seed)
+    -- 1) หาใน Backpack / Character (บางเกมยัด Attribute "ID" ไว้ที่ Tool)
+    local containers = {plr.Backpack, plr.Character}
+    for _, container in ipairs(containers) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local itemName = tool:GetAttribute("ItemName")
+                    if itemName == seed then
+                        local id = tool:GetAttribute("ID")
+                        if id then
+                            return id
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function plant(tile, seed)
+    local id = findLatestCactusId(seed)
+    local plantitem = seed:match("^(%S+)")
+    if not id then
+        warn("No dynamic ID found for Cactus; cannot place.")
+        return
+    end
+    local cf = randomCFrameOnTop(tile)
+    -- ทำ payload แบบเดียวกับที่ RemoteSpy จับได้
+    local args = {
         {
-            ID = ITEM_ID,
-            CFrame = randomCFrameOnTop(tile),
-            Item = ITEM_NAME,
+            ID = id, -- ใช้ ID ล่าสุด
+            CFrame = cf,
+            Item = plantitem, -- ให้ตรงกับที่ RemoteSpy แสดงตอน Place
             Floor = tile
         }
-    )
+    }
+    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
 end
 
 if Tutorial.Visible then
@@ -154,7 +184,7 @@ if Tutorial.Visible then
         local tiles = getGrassTiles(currentPlot) -- รีเฟรชทุกรอบ
         if #tiles > 0 then
             local t = pickEmptyThenAny(tiles)
-            plant(t)
+            plant(t, "Cactus Seed")
             task.wait(PLANT_DELAY)
         end
     end
