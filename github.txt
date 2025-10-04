@@ -18,3 +18,9 @@ git pull --rebase origin main --allow-unrelated-histories
 git add .
 git rebase --continue            # ทำซ้ำจนจบ rebase
 git push -u origin main
+
+$USER = "XeLfat"
+$REPO = "study"
+$FILE = "tmith.lua"
+$SHA  = git rev-parse HEAD
+Write-Output "https://raw.githubusercontent.com/$USER/$REPO/$SHA/$FILE"
