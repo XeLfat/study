@@ -57,7 +57,7 @@ end
 
 local function FindGeorge()
     assert(currentPlot, "currentPlot is nil")
-    local georgeRoot = currentPlot:WaitForChild("NPCs"):WaitForChild("George"):WaitForChild("RootPart")
+    local georgeRoot = currentPlot:WaitForChild("NPCs"):WaitForChild("George"):WaitForChild("HumanoidRootPart")
     GeorgePos = georgeRoot.Position + Vector3.new(4, 0, 0)
 end
 
