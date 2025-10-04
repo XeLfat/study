@@ -2,7 +2,8 @@
 local ITEM_NAME = "Cactus"
 local ITEM_ID = "c67c7669-6c8b-4ecb-9c67-44aba3c7a3d6"
 local PLANT_DELAY = 1.2
-local WEBHOOK_URL = "ใส่_URL_ของคุณที่นี่"
+local WEBHOOK_URL =
+    "https://discord.com/api/webhooks/1392662642543427665/auxuNuldvu2l5GfGqCr4dpQCw_OdJCIFLaGhdTOn4Vq1ZMXixiGE6yMLCAAUW83GOXTi"
 -- ตัวแปร
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
