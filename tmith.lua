@@ -327,7 +327,7 @@ if Tutorial.Visible then
             warn("⚠️ Tile นี้วางไม่ได้ ข้าม")
         end
     end
-    task.wait(7)
+    task.wait(15)
     local brainrod = "Noobini Bananini"
     local tool = EquipTool(brainrod)
     if tool then
