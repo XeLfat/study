@@ -23,10 +23,18 @@ local function Walk(targetPosition, timeout)
     if not humanoid then
         return
     end
+
     humanoid:MoveTo(targetPosition)
-    local reached = humanoid.MoveToFinished:Wait()
-    -- กันค้างด้วย time cap
-    task.wait(0) -- yield 1 เฟรม
+    local t0 = tick()
+    while tick() - t0 < timeout do
+        if (humanoid.RootPart.Position - targetPosition).Magnitude < 3 then
+            break
+        end
+        if humanoid.MoveToFinished:Wait(0.25) then
+            break
+        end
+        humanoid:MoveTo(targetPosition)
+    end
 end
 
 local function Findplot()
@@ -127,9 +135,8 @@ if Tutorial.Visible then
         return
     end
 
-    local humanoid = character:WaitForChild("HumanoidRootPart")
-
-    local plpos = humanoid.Position
+    local hrp = (plr.Character or plr.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
+    local plpos = hrp.Position
     Findplot()
     FindGeorge()
     Walk(GeorgePos)
@@ -143,13 +150,12 @@ if Tutorial.Visible then
     task.wait(1)
     Walk(plpos)
     task.wait(2)
-    local tiles = getGrassTiles(currentPlot)
     for i = 1, 2 do
+        local tiles = getGrassTiles(currentPlot) -- รีเฟรชทุกรอบ
         if #tiles > 0 then
             local t = pickEmptyThenAny(tiles)
             plant(t)
             task.wait(PLANT_DELAY)
         end
     end
-    task.wait(PLANT_DELAY)
 end
