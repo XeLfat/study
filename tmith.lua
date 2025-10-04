@@ -348,4 +348,8 @@ if Tutorial.Visible then
     end
     brainrodspart(currentPlot)
     Walk(BrainrotPos)
+    task.wait(1)
+    vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+    task.wait(0.1)
+    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
 end
