@@ -352,4 +352,6 @@ if Tutorial.Visible then
     vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
     task.wait(2)
     vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+    task.wait(1)
+    Walk(plpos)
 end
