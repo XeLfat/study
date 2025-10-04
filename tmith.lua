@@ -15,7 +15,7 @@ local PlaceItem = RS:WaitForChild("Remotes"):WaitForChild("PlaceItem")
 local vim = game:GetService("VirtualInputManager")
 local currentPlot = nil
 local GeorgePos = nil
--- Functions
+--Functions
 local function Walk(targetPosition, timeout)
     timeout = timeout or 8
     local character = plr.Character or plr.CharacterAdded:Wait()
@@ -153,23 +153,3 @@ if Tutorial.Visible then
     end
     task.wait(PLANT_DELAY)
 end
-
--- บันทึก
--- git add .
--- git commit -m "ข้อความ"
--- git push origin main
--- loadstring
--- loadstring(game:HttpGet("https://raw.githubusercontent.com/XeLfat/study/refs/heads/main/tmith.lua"))()
--- https://pastebin.com/raw/CX2pQcmE
--- loadstring(game:HttpGet("https://pastebin.com/raw/CX2pQcmE"))()
--- คำสั่งเอาไฟล์ github มาใส่เครื่องเรา
--- # อยู่ในโฟลเดอร์โปรเจกต์ของคุณ
--- git status
--- git remote -v
--- git fetch origin
--- git branch -M main               # ให้แน่ใจว่าใช้ชื่อ main
--- git pull --rebase origin main --allow-unrelated-histories
--- # ถ้ามี conflict ให้แก้ไฟล์ แล้วรัน:
--- git add .
--- git rebase --continue            # ทำซ้ำจนจบ rebase
--- git push -u origin main
