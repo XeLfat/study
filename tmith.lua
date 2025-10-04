@@ -184,26 +184,6 @@ local function findLatestCactusId(seed)
     return nil
 end
 
-local function plant(tile, seed)
-    local id = findLatestCactusId(seed)
-    local plantitem = seed:match("^(%S+)")
-    if not id then
-        warn("No dynamic ID found for Cactus; cannot place.")
-        return
-    end
-    local cf = randomPointOnTile(tile)
-    -- ทำ payload แบบเดียวกับที่ RemoteSpy จับได้
-    local args = {
-        {
-            ID = id, -- ใช้ ID ล่าสุด
-            CFrame = cf,
-            Item = plantitem, -- ให้ตรงกับที่ RemoteSpy แสดงตอน Place
-            Floor = tile
-        }
-    }
-    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
-end
-
 local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่น "Cactus Seed"
     local character = plr.Character or plr.CharacterAdded:Wait()
 
@@ -235,7 +215,48 @@ local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่
     warn("❌ ไม่พบ Tool สำหรับ:", toolItemName)
     return nil
 end
+local function plant(tile, seed)
+    -- หา ID ล่าสุดของเมล็ด (จาก Backpack / Character)
+    local id = findLatestCactusId(seed)
+    if not id then
+        warn("❌ หา ID ของ " .. seed .. " ไม่เจอ")
+        return
+    end
 
+    -- ถือ Tool ก่อน (ต้องถือก่อนยิง Remote)
+    local tool = EquipTool(seed)
+    if not tool then
+        warn("⚠️ ไม่มี Tool ให้ถือ:", seed)
+        return
+    end
+
+    -- หา “จุดสุ่ม” ที่จะปลูก (ไม่ชนพืชเดิม)
+    local planted = getExistingPlants(currentPlot)
+    local spot = pickRandomFreePoint(tile, planted, 12, 0.15, 0.6)
+    if not spot then
+        warn("❌ ไม่มีจุดว่างใน tile นี้")
+        return
+    end
+
+    -- แยกชื่อ Item จาก seed ("Cactus Seed" → "Cactus")
+    local plantitem = seed:match("^(%S+)")
+
+    -- ยิง Remote (ตาม RemoteSpy)
+    local args = {
+        {
+            ID = id,
+            CFrame = CFrame.new(spot),
+            Item = plantitem,
+            Floor = tile
+        }
+    }
+
+    print(string.format("🌱 ปลูก %s (%s) ที่ตำแหน่ง (%.1f, %.1f, %.1f)", plantitem, id, spot.X, spot.Y, spot.Z))
+    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
+
+    -- แคชตำแหน่งไว้กันสุ่มซ้ำในรอบเดียวกัน
+    table.insert(planted, {position = spot, size = 1})
+end
 if Tutorial.Visible then
     local character = plr.Character
     if not character then
@@ -260,32 +281,34 @@ if Tutorial.Visible then
     for i = 1, 2 do
         local tiles = getGrassTiles(currentPlot)
         if #tiles == 0 then
+            warn("❌ ไม่พบ tile ที่ปลูกได้")
             break
         end
 
-        local planted = getExistingPlants(currentPlot) -- พืชที่มีอยู่ตอนนี้
-        local t = pickEmptyThenAny(tiles) -- ใช้ของเดิมเลือก tile ที่ว่าง
+        local planted = getExistingPlants(currentPlot)
+        local tile = pickEmptyThenAny(tiles)
 
-        if t and t:GetAttribute("CanPlace") then
-            -- หา “จุดสุ่มที่ว่างจริง” บน tile นี้
-            local spot = pickRandomFreePoint(t, planted, 12, 0.15, 0.6)
-            if spot then
-                local tool = EquipTool("Cactus Seed")
-                if tool then
-                    local id = findLatestCactusId("Cactus Seed")
-                    if id then
-                        local cf = CFrame.new(spot)
-                        local args = {{ID = id, CFrame = cf, Item = "Cactus", Floor = t}}
-                        RS.Remotes.PlaceItem:FireServer(unpack(args))
-
-                        -- อัปเดตแคชฝั่งเรา กันสุ่มไปทับในรอบเดียวกัน
-                        table.insert(planted, {position = spot, size = 1})
-                        task.wait(PLANT_DELAY + 0.1)
+        if tile and tile:GetAttribute("CanPlace") then
+            -- ✅ ถ้าวางได้ ค่อยทำงานต่อ
+            local seed = "Cactus Seed"
+            local tool = EquipTool(seed)
+            if tool then
+                local char = plr.Character or plr.CharacterAdded:Wait()
+                for _ = 1, 15 do
+                    if char:FindFirstChild(tool.Name) then
+                        break
                     end
+                    task.wait(0.05)
                 end
+
+                plant(tile, seed)
+                task.wait(PLANT_DELAY + 0.1)
             else
-                warn("หา spot ว่างบน tile นี้ไม่เจอ ลอง tile อื่น")
+                warn("⚠️ ไม่มี Tool สำหรับ:", seed)
             end
+        else
+            -- ❌ ถ้าวางไม่ได้ แค่ข้ามเฉย ๆ ไม่ต้อง continue
+            warn("⚠️ Tile นี้วางไม่ได้ ข้าม")
         end
     end
 end
