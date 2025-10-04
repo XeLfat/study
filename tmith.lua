@@ -268,7 +268,12 @@ local function brainrodspart(plot)
     for _, brainrot in ipairs(brainrots:GetChildren()) do
         local Enabled = brainrot:GetAttribute("Enabled")
         if Enabled then
-            BrainrotPos = brainrot.Position
+            local brainrotbase = brainrot
+            for _, v in ipairs(brainrotbase:GetChildren()) do
+                if v:IsA("BasePart") and v.Name == "Center" then
+                    BrainrotPos = v.Position
+                end
+            end
         end
     end
 end
