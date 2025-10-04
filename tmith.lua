@@ -15,6 +15,8 @@ local PlaceItem = RS:WaitForChild("Remotes"):WaitForChild("PlaceItem")
 local vim = game:GetService("VirtualInputManager")
 local currentPlot = nil
 local GeorgePos = nil
+local BrainrotPos = nil
+
 --Functions
 local function Walk(targetPosition, timeout)
     timeout = timeout or 8
@@ -257,6 +259,19 @@ local function plant(tile, seed)
     -- แคชตำแหน่งไว้กันสุ่มซ้ำในรอบเดียวกัน
     table.insert(planted, {position = spot, size = 1})
 end
+
+local function brainrodspart(plot)
+    local brainrots = plot:FindFirstChild("Brainrots")
+    if not brainrots then
+        return
+    end
+    for _, brainrot in ipairs(brainrots:GetChildren()) do
+        local Enabled = brainrot:GetAttribute("Enabled")
+        if Enabled then
+            BrainrotPos = brainrot.CFrame
+        end
+    end
+end
 if Tutorial.Visible then
     local character = plr.Character
     if not character then
@@ -311,4 +326,20 @@ if Tutorial.Visible then
             warn("⚠️ Tile นี้วางไม่ได้ ข้าม")
         end
     end
+    task.wait(1)
+    local brainrod = "Noobini Bananini"
+    local tool = EquipTool(brainrod)
+    if tool then
+        local char = plr.Character or plr.CharacterAdded:Wait()
+        for _ = 1, 15 do
+            if char:FindFirstChild(tool.Name) then
+                break
+            end
+            task.wait(0.05)
+        end
+    else
+        warn("⚠️ ไม่มี Tool สำหรับ:", brainrod)
+    end
+    brainrodspart(currentPlot)
+    Walk(BrainrotPos)
 end
