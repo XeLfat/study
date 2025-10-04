@@ -163,6 +163,34 @@ local function plant(tile, seed)
     game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
 end
 
+local function EquipTool(toolName)
+    local backpack = plr:FindFirstChild("Backpack")
+    local character = plr.Character or plr.CharacterAdded:Wait()
+
+    if not backpack then
+        warn("❌ Backpack ไม่พบ")
+        return nil
+    end
+
+    for _, tool in ipairs(backpack:GetChildren()) do
+        if tool:IsA("Tool") then
+            local itemName = tool:GetAttribute("ItemName")
+            if itemName == toolName then
+                -- ถือขึ้นมือ
+                tool.Parent = character
+                print("🪓 ถือ Tool:", tool.Name)
+
+                -- รอให้ถือสำเร็จ
+                task.wait(0.3)
+                return tool
+            end
+        end
+    end
+
+    warn("❌ ไม่พบ Tool ชื่อ:", toolName)
+    return nil
+end
+
 if Tutorial.Visible then
     local character = plr.Character
     if not character then
@@ -185,11 +213,38 @@ if Tutorial.Visible then
     Walk(plpos)
     task.wait(2)
     for i = 1, 2 do
-        local tiles = getGrassTiles(currentPlot) -- รีเฟรชทุกรอบ
+        local tiles = getGrassTiles(currentPlot)
         if #tiles > 0 then
             local t = pickEmptyThenAny(tiles)
-            plant(t, "Cactus Seed")
-            task.wait(PLANT_DELAY)
+
+            -- ถ้า tile นี้วางไม่ได้ ให้ข้ามไปหาตัวถัดไป
+            if not t:GetAttribute("CanPlace") then
+                warn("❌ Tile นี้วางไม่ได้ ข้าม")
+            else
+                local tool = EquipTool("Cactus Seed")
+                if tool then
+                    local char = plr.Character or plr.CharacterAdded:Wait()
+
+                    -- รอให้ถือสำเร็จจริง
+                    for _ = 1, 15 do
+                        if char:FindFirstChild(tool.Name) then
+                            break
+                        end
+                        task.wait(0.05)
+                    end
+
+                    -- กันกรณี Uses หมด
+                    local uses = tool:GetAttribute("Uses")
+                    if uses and uses <= 0 then
+                        warn("⚠️ Seed ใช้หมดแล้ว ข้าม")
+                    else
+                        plant(t, "Cactus Seed")
+                        task.wait(PLANT_DELAY + 0.2)
+                    end
+                else
+                    warn("⚠️ ไม่มี Cactus Seed ให้ถือ")
+                end
+            end
         end
     end
 end
