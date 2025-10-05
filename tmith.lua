@@ -9,7 +9,7 @@ local PLANT_DELAY = 1.2
 local COLLECT_INTERVAL = 60 -- วินาที: เดินเก็บเงินทุก ๆ 1 นาที
 local MAX_PLATFORM_IDX = 80 -- ไล่ตรวจแพลตฟอร์มได้สูงสุดถึงหมายเลขนี้
 local WEBHOOK_URL = "PUT_YOUR_WEBHOOK_HERE" -- วาง URL Discord Webhook (หรือ "" ถ้าไม่ใช้)
-
+local MAX_ROW_IDX = 7
 -- ===== SERVICES =====
 local Players = game:GetService("Players")
 local RS = game:GetService("ReplicatedStorage")
@@ -299,11 +299,25 @@ local function getOwnedSeeds()
 end
 
 local function plantOwnedSeeds()
+    local free, used, cap = getFreePlantSlots()
+    if free <= 0 then
+        sendEmbed(
+            "🌱 ถึงลิมิตปลูก",
+            ("ปลูกแล้ว %d/%d — รอสั่งซื้อ Row ใหม่ก่อนค่อยปลูกต่อ"):format(used, cap),
+            0xFAA61A
+        )
+        return
+    end
+
     local seeds = getOwnedSeeds()
     if #seeds == 0 then
         return
     end
+
     for _, s in ipairs(seeds) do
+        if free <= 0 then
+            break
+        end
         if EquipTool(s.Name) then
             local char = plr.Character or plr.CharacterAdded:Wait()
             for _ = 1, 15 do
@@ -312,7 +326,10 @@ local function plantOwnedSeeds()
                 end
                 task.wait(0.05)
             end
-            for i = 1, s.Uses do
+
+            -- ปลูกได้เท่าที่มีช่องว่าง
+            local usesToPlant = math.min(s.Uses or 1, free)
+            for i = 1, usesToPlant do
                 local tiles = getGrassTiles(currentPlot)
                 if #tiles == 0 then
                     return
@@ -320,6 +337,10 @@ local function plantOwnedSeeds()
                 local t = pickEmptyThenAny(tiles)
                 if t and t:GetAttribute("CanPlace") then
                     plant(t, s.Name)
+                    free = free - 1
+                    if free <= 0 then
+                        break
+                    end
                     task.wait(PLANT_DELAY + 0.1)
                 end
             end
@@ -328,8 +349,10 @@ local function plantOwnedSeeds()
 end
 
 -- ===== SHOP (GUI) =====
+-- แปลงข้อความราคา -> number (รองรับ $, คอมมา, ช่องว่าง, ทศนิยม และ k/m/b/t)
 local function parsePrice(txt)
-    txt = tostring(txt or ""):lower():gsub("%$", ""):gsub(",", ""):gsub("%s+", "")
+    txt = tostring(txt or "")
+    txt = txt:lower():gsub("%$", ""):gsub(",", ""):gsub("%s+", "")
     local mult = 1
     if txt:find("k") then
         mult = 1e3
@@ -583,10 +606,153 @@ local function getAvailableSeeds()
     return list
 end
 
+-- ใช้ parsePrice(txt) ของคุณอยู่แล้ว (แปลง $5,000 / $5k → number)
+
+local function getRowPrice(rowFolder)
+    -- workspace.Plots[<id>].Rows["n"].Button.Main.SurfaceGui.TextLabel
+    local button = rowFolder:FindFirstChild("Button")
+    local main = button and button:FindFirstChild("Main")
+    local sg = main and main:FindFirstChild("SurfaceGui")
+    local label = sg and sg:FindFirstChild("TextLabel")
+    if label and typeof(label.Text) == "string" then
+        return parsePrice(label.Text)
+    end
+    return 0
+end
+
+local function findNextRowToBuy()
+    if not currentPlot then
+        return nil
+    end
+    local rows = currentPlot:FindFirstChild("Rows")
+    if not rows then
+        return nil
+    end
+
+    -- เริ่มจาก 2 เพราะแถว 1 มักได้มาตั้งแต่แรก
+    for i = 2, MAX_ROW_IDX do
+        local rf = rows:FindFirstChild(tostring(i))
+        if not rf then
+            break
+        end
+
+        local enabled = rf:GetAttribute("Enabled")
+        if enabled == true then
+            -- ซื้อแล้ว ข้าม
+        else
+            local price = getRowPrice(rf)
+            if price and price > 0 then
+                return i, price, rf
+            end
+        end
+    end
+    return nil
+end
+local function tryBuyNextRow_NoWalk()
+    local idx, price = findNextRowToBuy()
+    if not idx then
+        return false
+    end
+
+    local money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
+    if money < price then
+        sendEmbed(
+            "🌿 ซื้อแถวปลูกพืช",
+            ("เงินไม่พอซื้อ **Row #%d** (ต้องการ $%s)"):format(idx, tostring(price)),
+            0xFAA61A
+        )
+        return false
+    end
+
+    local ok, err =
+        pcall(
+        function()
+            -- ตัวอย่างจากคุณ: FireServer(2) แบบเลขล้วน
+            RS.Remotes.BuyRow:FireServer(idx)
+        end
+    )
+
+    if ok then
+        sendEmbed(
+            "🌿 ซื้อแถวปลูกพืชสำเร็จ",
+            ("ซื้อ **Row #%d** ราคา **$%s** (+5 slot)"):format(idx, tostring(price)),
+            0x57F287
+        )
+    else
+        sendEmbed("🌿 ซื้อแถวล้มเหลว", "```" .. tostring(err) .. "```", 0xED4245)
+    end
+    return ok
+end
+local function getPlantCapacity()
+    if not currentPlot then
+        return 0
+    end
+    local rows = currentPlot:FindFirstChild("Rows")
+    if not rows then
+        return 0
+    end
+    local enabledCount = 0
+    for _, rf in ipairs(rows:GetChildren()) do
+        if rf:GetAttribute("Enabled") == true then
+            enabledCount = enabledCount + 1
+        end
+    end
+    return enabledCount * 5 -- เกมนี้แถวละ +5
+end
+
+-- นับจำนวนแถว (Row) ที่ใช้งานอยู่ แล้วคูณ 5 = ความจุปลูกสูงสุด
+local function getPlantCapacity()
+    if not currentPlot then
+        return 0
+    end
+    local rows = currentPlot:FindFirstChild("Rows")
+    if not rows then
+        return 0
+    end
+
+    local enabled = 0
+    for _, rf in ipairs(rows:GetChildren()) do
+        if rf:IsA("Folder") then
+            local en = rf:GetAttribute("Enabled")
+            -- บางแมพ Row#1 อาจไม่มี Attribute ให้ถือว่าใช้ได้เสมอ
+            if en == true or (en == nil and rf.Name == "1") then
+                enabled = enabled + 1
+            end
+        end
+    end
+    return enabled * 5
+end
+
+-- นับจำนวน “ต้นไม้ของเรา” ที่ปลูกอยู่จริงใน plot ตอนนี้
+local function getMyPlantCount()
+    if not currentPlot then
+        return 0
+    end
+    local folder = currentPlot:FindFirstChild("Plants")
+    if not folder then
+        return 0
+    end
+
+    local n = 0
+    for _, p in ipairs(folder:GetChildren()) do
+        -- ในรูป Owner เป็นชื่อผู้เล่น (เช่น "AJKJ9098a")
+        if p:GetAttribute("Owner") == plr.Name then
+            n = n + 1
+        end
+    end
+    return n
+end
+
+local function getFreePlantSlots()
+    local cap = getPlantCapacity()
+    local used = getMyPlantCount()
+    return math.max(0, cap - used), used, cap
+end
+
 -- ===== MAIN LOOP (ทุกอย่างรวมไว้ที่นี่) =====
 local lastCollect = tick()
 sendText("🔁 เริ่ม Auto PvB (No-Walk + Webhook + Collect/1min)")
-
+local lastCap = getPlantCapacity()
 while _G.Enabled do
     -- 1) ซื้อเมล็ดที่แพงสุดที่ซื้อไหว (เช็กจาก GUI โดยตรง + มีสต็อก)
     local seeds = getAvailableSeeds()
@@ -608,6 +774,14 @@ while _G.Enabled do
         end
     end
 
+    -- 2) ปลูกตามจำนวนเมล็ดที่มีจริง (ห้ามเกินความจุ)
+    local freeSlots, usedSlots, capSlots = getFreePlantSlots()
+    if freeSlots > 0 then
+        plantOwnedSeeds()
+    else
+        -- เต็มแล้ว: พยายามซื้อ Row เพิ่มแทนการปลูก
+        tryBuyNextRow_NoWalk()
+    end
     -- 2) ปลูกตามจำนวนเมล็ดที่มีจริง
     plantOwnedSeeds()
 
@@ -619,7 +793,13 @@ while _G.Enabled do
 
     -- 4) ลองซื้อแพลตฟอร์มถัดไป (ข้ามช่องที่มี Rebirth)
     tryBuyNextPlatform_NoWalk()
+    tryBuyNextRow_NoWalk()
+    local cap = getPlantCapacity()
 
+    if cap > lastCap then
+        sendEmbed("📈 เพิ่มความจุปลูก", ("จาก **%d** → **%d** ต้น"):format(lastCap, cap), 0x00FFFF)
+        lastCap = cap
+    end
     task.wait(1)
 end
 
