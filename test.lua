@@ -1,3 +1,5 @@
+_G.Enabled = true
+
 -- ===== CONFIG =====
 local PLANT_DELAY = 1.2
 local WEBHOOK_URL =
@@ -112,7 +114,7 @@ local function FindGeorge()
 end
 
 local function BuySeed(seedName)
-  local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyItem")
+    local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyItem")
     BuyItem:FireServer(seedName)
 end
 
@@ -415,4 +417,74 @@ if Tutorial.Visible then
     task.wait(1)
     Walk(plpos)
     sendText("ผ่าน Tutorial แล้ว!", "AutoPlanter Bot")
+end
+
+-- ใช้ที่ไหนก็ได้หลังจากประกาศ plr = Players.LocalPlayer แล้ว
+local function getBestBrainrot()
+    local best = nil
+    local holders = {plr.Backpack, plr.Character} -- เผื่อถืออยู่ในมือ
+
+    for _, container in ipairs(holders) do
+        if container then
+            for _, tool in ipairs(container:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local isBrainrot = tool:GetAttribute("Brainrot") -- string ชื่อเช่น "Boneca Ambalabu" หรือ boolean ก็ได้
+                    local itemName = tool:GetAttribute("ItemName") or tool.Name
+                    local worthAttr = tool:GetAttribute("Worth") -- อาจเป็น number หรือ string
+                    local worth = tonumber(worthAttr) or 0
+
+                    if isBrainrot and worth > 0 then
+                        if not best or worth > best.Worth then
+                            best = {
+                                Instance = tool, -- ตัว tool จริง (จะ equip ต่อก็ได้)
+                                Brainrot = isBrainrot, -- ชื่อ brainrot ที่อยู่ใน attribute
+                                ItemName = itemName, -- ชื่อที่ต้องการแสดง/เก็บ
+                                Worth = worth -- มูลค่า
+                            }
+                        end
+                    end
+                end
+            end
+        end
+    end
+
+    -- เก็บไว้เป็นตัวแปรให้เรียกใช้สะดวก
+    if best then
+        getgenv().BestBrainrotItemName = best.ItemName
+        getgenv().BestBrainrotWorth = best.Worth
+    else
+        getgenv().BestBrainrotItemName = nil
+        getgenv().BestBrainrotWorth = nil
+    end
+
+    return best
+end
+local function BuyPlatBrainrod(num)
+    local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyPlatform")
+    BuyItem:FireServer(num)
+end
+while _G.Enabled do
+    local Money = game:GetService("Players").LocalPlayer.leaderstats.Money.Value
+    if currentPlot.Plants["2"].PlatformPrice then
+        if Money < 100 then
+            Walk(currentPlot.Plants["1"].Center.Position)
+            while Money < 100 do
+                vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                task.wait(0.1)
+                vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
+                task.wait(10)
+                print(Money)
+            end
+        elseif Money > 100 then
+            local best = getBestBrainrot()
+            if best then
+                print(("Best Brainrot: %s (Worth=%s)"):format(best.ItemName, best.Worth))
+            else
+                warn("ไม่พบ Brainrot ในกระเป๋า/มือ")
+            end
+            EquipTool(getgenv().BestBrainrotItemName)
+            Walk(currentPlot.Plants["2"].Center.Position)
+            BuyPlatBrainrod("2")
+        end
+    end
 end

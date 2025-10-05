@@ -1,132 +1,86 @@
+-- =========================
+-- Plants vs Brainrots – Auto Loop (No-Walk + Webhook + Collect/1min)
+-- by you & helper 😄
+-- =========================
 _G.Enabled = true
 
 -- ===== CONFIG =====
 local PLANT_DELAY = 1.2
-local WEBHOOK_URL =
-    "https://discord.com/api/webhooks/1392662642543427665/auxuNuldvu2l5GfGqCr4dpQCw_OdJCIFLaGhdTOn4Vq1ZMXixiGE6yMLCAAUW83GOXTi"
--- ตัวแปร
+local COLLECT_INTERVAL = 60 -- วินาที: เดินเก็บเงินทุก ๆ 1 นาที
+local MAX_PLATFORM_IDX = 80 -- ไล่ตรวจแพลตฟอร์มได้สูงสุดถึงหมายเลขนี้
+local WEBHOOK_URL = "PUT_YOUR_WEBHOOK_HERE" -- วาง URL Discord Webhook (หรือ "" ถ้าไม่ใช้)
+
+-- ===== SERVICES =====
 local Players = game:GetService("Players")
-local TweenService = game:GetService("TweenService")
-local plr = Players.LocalPlayer
-local Tutorial = plr.PlayerGui.HUD:WaitForChild("Tutorial")
-local Plots = workspace.Plots
 local RS = game:GetService("ReplicatedStorage")
-local vim = game:GetService("VirtualInputManager")
-local currentPlot = nil
-local GeorgePos = nil
-local BrainrotPos = nil
-local HttpService = game:GetService("HttpService")
+local VIM = game:GetService("VirtualInputManager")
+local Http = game:GetService("HttpService")
+local plr = Players.LocalPlayer
+local Plots = workspace:WaitForChild("Plots")
 
-local function sendWebhook(url, payloadTable)
-    local json = HttpService:JSONEncode(payloadTable)
-    local headers = {["Content-Type"] = "application/json"}
-
-    -- ตัวรันยอดนิยม
-    local req = getgenv().http_request or request or (syn and syn.request) or http_request
-    if req then
-        local res = req({Url = url, Method = "POST", Headers = headers, Body = json})
-        return res and res.StatusCode or 0, res and res.Body or ""
-    else
-        -- สำรองด้วย HttpService (ต้องเปิด HTTP ในเกม/สตูดิโอ)
-        local ok, body =
-            pcall(
-            function()
-                return HttpService:PostAsync(url, json, Enum.HttpContentType.ApplicationJson)
-            end
-        )
-        return ok and 200 or 0, body or ""
-    end
-end
-
--- ==== HELPERS ====
--- ข้อความธรรมดา
-local function sendText(content, username, avatar_url)
-    local payload = {
-        content = content,
-        username = username,
-        avatar_url = avatar_url
-    }
-    return sendWebhook(WEBHOOK_URL, payload)
-end
-
--- ข้อความแบบ embed
-local function sendEmbed(title, desc, color, fields, username, avatar_url)
-    local payload = {
-        username = username,
-        avatar_url = avatar_url,
-        embeds = {
-            {
-                title = title,
-                description = desc,
-                color = color or 0x57F287, -- เขียวอ่อน
-                fields = fields, -- {{name="Tile", value="Row 1 / Grass 3", inline=true}, ...}
-                timestamp = DateTime.now():ToIsoDate()
-            }
-        }
-    }
-    return sendWebhook(WEBHOOK_URL, payload)
-end
-
---Functions
-local function Walk(targetPosition, timeout)
-    timeout = timeout or 8
-    local character = plr.Character or plr.CharacterAdded:Wait()
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    if not humanoid then
+-- ===== WEBHOOK HELPERS (optional) =====
+local function _postWebhook(payload)
+    if not WEBHOOK_URL or WEBHOOK_URL == "" then
         return
     end
-
-    humanoid:MoveTo(targetPosition)
-    local t0 = tick()
-    while tick() - t0 < timeout do
-        if (humanoid.RootPart.Position - targetPosition).Magnitude < 3 then
-            break
-        end
-        if humanoid.MoveToFinished:Wait(0.25) then
-            break
-        end
-        humanoid:MoveTo(targetPosition)
+    local req = getgenv().http_request or request or (syn and syn.request) or http_request
+    local body = Http:JSONEncode(payload)
+    local headers = {["Content-Type"] = "application/json"}
+    if req then
+        pcall(
+            function()
+                req({Url = WEBHOOK_URL, Method = "POST", Headers = headers, Body = body})
+            end
+        )
     end
 end
+local function sendText(msg)
+    _postWebhook({content = msg, username = "AutoPvB"})
+end
+local function sendEmbed(title, desc, color, fields)
+    _postWebhook(
+        {
+            username = "AutoPvB",
+            embeds = {
+                {
+                    title = title,
+                    description = desc,
+                    color = color or 0x57F287,
+                    fields = fields,
+                    timestamp = DateTime.now():ToIsoDate()
+                }
+            }
+        }
+    )
+end
 
+-- ===== FIND MY PLOT =====
+local currentPlot
 local function Findplot()
     for _, plot in ipairs(Plots:GetChildren()) do
-        local playerSign = plot:FindFirstChild("PlayerSign")
-        local billboard = playerSign and playerSign:FindFirstChild("BillboardGui")
-        local textLabel = billboard and billboard:FindFirstChild("TextLabel")
-        if textLabel and textLabel.Text == plr.Name then
+        local sign = plot:FindFirstChild("PlayerSign")
+        local bb = sign and sign:FindFirstChild("BillboardGui")
+        local tl = bb and bb:FindFirstChild("TextLabel")
+        if tl and tl.Text == plr.Name then
             currentPlot = plot
             return plot
         end
     end
-    return nil
 end
-
--- ก่อนใช้ ต้องรอให้เจอ
 while not Findplot() do
     task.wait(0.25)
 end
 
-local function FindGeorge()
-    assert(currentPlot, "currentPlot is nil")
-    local georgeRoot = currentPlot:WaitForChild("NPCs"):WaitForChild("George"):WaitForChild("HumanoidRootPart")
-    GeorgePos = georgeRoot.Position + Vector3.new(4, 0, 0)
-end
-
-local function BuySeed(seedName)
-    local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyItem")
-    BuyItem:FireServer(seedName)
-end
-
+-- ===== TILES / PLANTS =====
 local function getGrassTiles(plot)
     local tiles, rows = {}, plot and plot:FindFirstChild("Rows")
     if not rows then
         return tiles
     end
     for _, row in ipairs(rows:GetChildren()) do
-        local grassFolder = row:FindFirstChild("Grass")
-        if grassFolder then
-            for _, inst in ipairs(grassFolder:GetChildren()) do
+        local g = row:FindFirstChild("Grass")
+        if g then
+            for _, inst in ipairs(g:GetChildren()) do
                 if inst:IsA("BasePart") then
                     local CanPlace = inst:GetAttribute("CanPlace")
                     if CanPlace then
@@ -136,44 +90,39 @@ local function getGrassTiles(plot)
             end
         end
     end
-    print("[GrassTiles] พบ", #tiles, "บล็อกที่ปลูกได้")
     return tiles
 end
 
 local function randomPointOnTile(tile, margin)
     margin = margin or 0.15
-    local halfX = tile.Size.X * (0.5 - margin)
-    local halfZ = tile.Size.Z * (0.5 - margin)
-    local ox = (math.random() * 2 - 1) * halfX
-    local oz = (math.random() * 2 - 1) * halfZ
-    local pos = (tile.CFrame * CFrame.new(ox, tile.Size.Y / 2, oz)).Position
-    return pos
+    local hx, hz = tile.Size.X * (0.5 - margin), tile.Size.Z * (0.5 - margin)
+    local ox = (math.random() * 2 - 1) * hx
+    local oz = (math.random() * 2 - 1) * hz
+    return (tile.CFrame * CFrame.new(ox, tile.Size.Y / 2, oz)).Position
 end
 
 local function getExistingPlants(plot)
-    local plantsFolder = plot:FindFirstChild("Plants")
-    local plants = {}
-    if not plantsFolder then
-        return plants
+    local folder, res = plot:FindFirstChild("Plants"), {}
+    if not folder then
+        return res
     end
-    for _, p in ipairs(plantsFolder:GetChildren()) do
+    for _, p in ipairs(folder:GetChildren()) do
         if p:GetAttribute("Owner") == plr.Name then
             local pos = p:GetAttribute("Position")
-            local size = p:GetAttribute("Size")
+            local sz = p:GetAttribute("Size")
             if typeof(pos) == "Vector3" then
-                table.insert(plants, {position = pos, size = size})
+                table.insert(res, {position = pos, size = sz})
             end
         end
     end
-    return plants
+    return res
 end
 
 local function isSpotFree(point, plants, minGap)
-    minGap = minGap or 0.6 -- เว้นระยะขั้นต่ำ (ปรับได้)
+    minGap = minGap or 0.6
     for _, pl in ipairs(plants) do
-        -- ใช้ size ของพืชช่วยกันชน (เผื่อบางชนิดใหญ่)
-        local needGap = math.max(minGap, (pl.size or 1) * 0.5)
-        if (point - pl.position).Magnitude <= needGap then
+        local need = math.max(minGap, (pl.size or 1) * 0.5)
+        if (point - pl.position).Magnitude <= need then
             return false
         end
     end
@@ -188,7 +137,7 @@ local function pickRandomFreePoint(tile, plants, tries, margin, minGap)
             return pt
         end
     end
-    return nil -- ไม่เจอจุดว่างภายในจำนวนครั้งที่กำหนด
+    return nil
 end
 
 local function isTileEmpty(tile)
@@ -196,7 +145,6 @@ local function isTileEmpty(tile)
     if occ ~= nil then
         return not occ
     end
-    -- fallback: ไม่มี attribute ก็เช็กลูกหยาบ ๆ
     for _, c in ipairs(tile:GetChildren()) do
         if c:IsA("Model") or c:IsA("BasePart") then
             return false
@@ -213,49 +161,24 @@ local function pickEmptyThenAny(tiles)
         end
     end
     local list = (#empty > 0) and empty or tiles
-    return list[math.random(1, #list)]
+    return (#list > 0) and list[math.random(1, #list)] or nil
 end
 
-local function findLatesId(seed)
-    -- 1) หาใน Backpack / Character (บางเกมยัด Attribute "ID" ไว้ที่ Tool)
-    local containers = {plr.Backpack, plr.Character}
-    for _, container in ipairs(containers) do
-        if container then
-            for _, tool in ipairs(container:GetChildren()) do
-                if tool:IsA("Tool") then
-                    local itemName = tool:GetAttribute("ItemName")
-                    if itemName == seed then
-                        local id = tool:GetAttribute("ID")
-                        if id then
-                            return id
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return nil
-end
-
-local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่น "Cactus Seed"
-    local character = plr.Character or plr.CharacterAdded:Wait()
-
-    -- 1) ถ้าถืออยู่แล้ว ให้ใช้ต่อได้เลย
-    for _, tool in ipairs(character:GetChildren()) do
+-- ===== TOOLS / SEEDS =====
+local function EquipTool(toolItemName)
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    for _, tool in ipairs(char:GetChildren()) do
         if tool:IsA("Tool") and tool:GetAttribute("ItemName") == toolItemName then
             return tool
         end
     end
-
-    -- 2) ถ้าอยู่ใน Backpack ให้ย้ายมาถือ
-    local backpack = plr:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
+    local bag = plr:FindFirstChild("Backpack")
+    if bag then
+        for _, tool in ipairs(bag:GetChildren()) do
             if tool:IsA("Tool") and tool:GetAttribute("ItemName") == toolItemName then
-                tool.Parent = character
-                -- รอให้ถือสำเร็จจริง
+                tool.Parent = char
                 for _ = 1, 15 do
-                    if character:FindFirstChild(tool.Name) then
+                    if char:FindFirstChild(tool.Name) then
                         break
                     end
                     task.wait(0.05)
@@ -264,227 +187,394 @@ local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่
             end
         end
     end
-
-    warn("❌ ไม่พบ Tool สำหรับ:", toolItemName)
     return nil
 end
-local function plant(tile, seed)
-    -- หา ID ล่าสุดของเมล็ด (จาก Backpack / Character)
-    local id = findLatesId(seed)
+
+local function findLatestSeedId(seedName)
+    local containers = {plr.Character, plr.Backpack}
+    for _, bag in ipairs(containers) do
+        if bag then
+            for _, tool in ipairs(bag:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("ItemName") == seedName then
+                    local id = tool:GetAttribute("ID")
+                    if id then
+                        return id
+                    end
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- ซื้อเมล็ดผ่าน Remote โดยตรง + webhook
+local function BuySeed(seedName)
+    if not seedName or seedName == "" then
+        return false
+    end
+    local ok, err =
+        pcall(
+        function()
+            RS.Remotes.BuyItem:FireServer(seedName)
+        end
+    )
+    if ok then
+        sendEmbed("🛒 ซื้อเมล็ด", ("ซื้อ **%s** สำเร็จ"):format(seedName), 0x5865F2)
+    else
+        sendEmbed("🛒 ซื้อเมล็ดล้มเหลว", ("**%s**\n```%s```"):format(seedName, tostring(err)), 0xED4245)
+    end
+    return ok
+end
+
+-- ปลูก 1 ต้น (สุ่มจุดบน tile) + webhook
+local function plant(tile, seedName)
+    if not tile then
+        return
+    end
+    local id = findLatestSeedId(seedName)
     if not id then
-        warn("❌ หา ID ของ " .. seed .. " ไม่เจอ")
+        sendEmbed("🌱 ปลูกล้มเหลว", "หา **ID** ของ seed ไม่เจอ: `" .. tostring(seedName) .. "`", 0xED4245)
+        return
+    end
+    if not EquipTool(seedName) then
+        sendEmbed("🌱 ปลูกล้มเหลว", "ไม่มี/ถือ **Tool** ไม่ได้: `" .. tostring(seedName) .. "`", 0xED4245)
         return
     end
 
-    -- ถือ Tool ก่อน (ต้องถือก่อนยิง Remote)
-    local tool = EquipTool(seed)
-    if not tool then
-        warn("⚠️ ไม่มี Tool ให้ถือ:", seed)
-        return
-    end
-
-    -- หา “จุดสุ่ม” ที่จะปลูก (ไม่ชนพืชเดิม)
     local planted = getExistingPlants(currentPlot)
     local spot = pickRandomFreePoint(tile, planted, 12, 0.15, 0.6)
     if not spot then
-        warn("❌ ไม่มีจุดว่างใน tile นี้")
+        sendEmbed("🌱 ปลูกล้มเหลว", "ไม่พบตำแหน่งว่างบน tile", 0xED4245)
         return
     end
 
-    -- แยกชื่อ Item จาก seed ("Cactus Seed" → "Cactus")
-    local plantitem = seed:match("^(%S+)")
-
-    -- ยิง Remote (ตาม RemoteSpy)
-    local args = {
-        {
-            ID = id,
-            CFrame = CFrame.new(spot),
-            Item = plantitem,
-            Floor = tile
-        }
-    }
-
-    print(string.format("🌱 ปลูก %s (%s) ที่ตำแหน่ง (%.1f, %.1f, %.1f)", plantitem, id, spot.X, spot.Y, spot.Z))
-    game:GetService("ReplicatedStorage"):WaitForChild("Remotes"):WaitForChild("PlaceItem"):FireServer(unpack(args))
-    sendEmbed(
-        "🌵 ปลูกสำเร็จ!",
-        string.format("ปลูก **%s** แล้วที่ Tile: `%s`", seed:match("^(%S+)"), tile:GetFullName()),
-        0x57F287,
-        {
-            {name = "ตำแหน่ง", value = string.format("`%.1f, %.1f, %.1f`", spot.X, spot.Y, spot.Z), inline = true},
-            {name = "ID", value = id, inline = true}
-        },
-        "AutoPlanter"
+    local item = seedName:match("^(%S+)") -- "Cactus Seed" -> "Cactus"
+    local ok, err =
+        pcall(
+        function()
+            RS.Remotes.PlaceItem:FireServer(
+                {
+                    ID = id,
+                    CFrame = CFrame.new(spot),
+                    Item = item,
+                    Floor = tile
+                }
+            )
+        end
     )
-    -- แคชตำแหน่งไว้กันสุ่มซ้ำในรอบเดียวกัน
-    table.insert(planted, {position = spot, size = 1})
+
+    if ok then
+        sendEmbed(
+            "🌱 ปลูกสำเร็จ",
+            ("ปลูก **%s** บน `%s`\nตำแหน่ง `(%.1f, %.1f, %.1f)`"):format(
+                item,
+                tile:GetFullName(),
+                spot.X,
+                spot.Y,
+                spot.Z
+            ),
+            0x57F287,
+            {{name = "SeedID", value = "`" .. tostring(id) .. "`", inline = true}}
+        )
+    else
+        sendEmbed("🌱 ปลูกล้มเหลว", "PlaceItem error:\n```" .. tostring(err) .. "```", 0xED4245)
+    end
 end
 
-local function brainrodspart(plot)
-    local brainrots = plot:FindFirstChild("Brainrots")
-    if not brainrots then
+-- รายชื่อเมล็ดที่ถืออยู่จริง (ดู Attribute Seed/Uses)
+local function getOwnedSeeds()
+    local res, containers = {}, {plr.Backpack, plr.Character}
+    for _, bag in ipairs(containers) do
+        if bag then
+            for _, tool in ipairs(bag:GetChildren()) do
+                if tool:IsA("Tool") and tool:GetAttribute("Seed") then
+                    local name = tool:GetAttribute("ItemName") or tool.Name
+                    local uses = tonumber(tool:GetAttribute("Uses")) or 1
+                    table.insert(res, {Name = name, Uses = uses})
+                end
+            end
+        end
+    end
+    return res
+end
+
+local function plantOwnedSeeds()
+    local seeds = getOwnedSeeds()
+    if #seeds == 0 then
         return
     end
-    for _, brainrot in ipairs(brainrots:GetChildren()) do
-        local Enabled = brainrot:GetAttribute("Enabled")
-        local HaveBrainrot = brainrot:GetAttribute("Money")
-        if Enabled and not HaveBrainrot then
-            local brainrotbase = brainrot
-            for _, v in ipairs(brainrotbase:GetChildren()) do
-                if v:IsA("BasePart") and v.Name == "Center" then
-                    BrainrotPos = v.Position
+    for _, s in ipairs(seeds) do
+        if EquipTool(s.Name) then
+            local char = plr.Character or plr.CharacterAdded:Wait()
+            for _ = 1, 15 do
+                if char:FindFirstChild(s.Name) then
+                    break
+                end
+                task.wait(0.05)
+            end
+            for i = 1, s.Uses do
+                local tiles = getGrassTiles(currentPlot)
+                if #tiles == 0 then
+                    return
+                end
+                local t = pickEmptyThenAny(tiles)
+                if t and t:GetAttribute("CanPlace") then
+                    plant(t, s.Name)
+                    task.wait(PLANT_DELAY + 0.1)
                 end
             end
         end
     end
 end
-if Tutorial.Visible then
-    local character = plr.Character
-    if not character then
-        return
-    end
-    sendText("เริ่ม Tutorial แล้ว!", "AutoPlanter Bot")
 
-    local hrp = (plr.Character or plr.CharacterAdded:Wait()):WaitForChild("HumanoidRootPart")
-    local plpos = hrp.Position
-    Findplot()
-    print(currentPlot)
-    FindGeorge()
-    Walk(GeorgePos)
-    vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-    task.wait(0.1)
-    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-    task.wait(2)
-    BuySeed("Cactus Seed")
-    task.wait(1)
-    BuySeed("Cactus Seed")
-    task.wait(1)
-    Walk(plpos)
-    task.wait(2)
-    for i = 1, 2 do
-        local tiles = getGrassTiles(currentPlot)
-        if #tiles == 0 then
-            warn("❌ ไม่พบ tile ที่ปลูกได้")
+-- ===== SHOP (GUI) =====
+local function parsePrice(txt)
+    txt = tostring(txt or ""):lower():gsub("%$", ""):gsub(",", ""):gsub("%s+", "")
+    local mult = 1
+    if txt:find("k") then
+        mult = 1e3
+        txt = txt:gsub("k", "")
+    elseif txt:find("m") then
+        mult = 1e6
+        txt = txt:gsub("m", "")
+    elseif txt:find("b") then
+        mult = 1e9
+        txt = txt:gsub("b", "")
+    elseif txt:find("t") then
+        mult = 1e12
+        txt = txt:gsub("t", "")
+    end
+    local n = tonumber(txt) or 0
+    return math.floor(n * mult + 0.5)
+end
+
+local function readSeedShop()
+    local main = plr.PlayerGui:FindFirstChild("Main")
+    if not main then
+        return {}
+    end
+    local seedsRoot = main:FindFirstChild("Seeds")
+    if not seedsRoot then
+        return {}
+    end
+    local sf = seedsRoot:FindFirstChild("Frame") and seedsRoot.Frame:FindFirstChild("ScrollingFrame")
+    if not sf then
+        return {}
+    end
+    local items = {}
+    for _, seedFrame in ipairs(sf:GetChildren()) do
+        if seedFrame:IsA("Frame") then
+            local name = seedFrame.Name
+            local buy = seedFrame:FindFirstChild("Buttons") and seedFrame.Buttons:FindFirstChild("Buy")
+            local priceLabel = buy and buy:FindFirstChild("TextLabel")
+            if priceLabel and typeof(priceLabel.Text) == "string" then
+                table.insert(items, {SeedName = name, Price = parsePrice(priceLabel.Text)})
+            end
+        end
+    end
+    table.sort(
+        items,
+        function(a, b)
+            return a.Price > b.Price
+        end
+    ) -- แพง→ถูก
+    return items
+end
+
+local function pickBestAffordableSeed(money, items)
+    for _, it in ipairs(items) do
+        if money >= it.Price then
+            return it
+        end
+    end
+    return nil
+end
+
+-- ===== BRAINROT =====
+local function EquipBestBrainrot()
+    pcall(
+        function()
+            RS.Remotes.EquipBestBrainrots:FireServer()
+        end
+    )
+end
+
+-- ===== PLATFORMS (No-Walk) – ข้ามช่องที่มี Attribute `Rebirth` =====
+local function isPlatformOwned(slot)
+    local priceVal = slot:FindFirstChild("PlatformPrice")
+    local price = priceVal and tonumber(priceVal.Value) or 0
+    local rebirthAttr = slot:GetAttribute("Rebirth")
+    if rebirthAttr and tonumber(rebirthAttr) and tonumber(rebirthAttr) > 0 then
+        return false, "rebirth"
+    end
+    return (not priceVal) or (price <= 0), nil
+end
+
+-- ใช้ parsePrice(txt) เดิมของคุณได้เลย (แปลง "$5,000" → 5000)
+
+local function getPlatformPrice(slot)
+    local priceObj = slot:FindFirstChild("PlatformPrice")
+    if not priceObj then
+        return 0
+    end
+
+    -- กรณีเป็น NumberValue/IntValue
+    if priceObj:IsA("NumberValue") or priceObj:IsA("IntValue") then
+        return tonumber(priceObj.Value) or 0
+    end
+
+    -- กรณีเป็นโฟลเดอร์ UI ที่มี TextLabel: Money
+    local moneyLabel = nil
+    for _, d in ipairs(priceObj:GetDescendants()) do
+        if d:IsA("TextLabel") and d.Name == "Money" then
+            moneyLabel = d
+            break
+        end
+    end
+    if moneyLabel and typeof(moneyLabel.Text) == "string" then
+        return parsePrice(moneyLabel.Text) -- "$5,000" -> 5000
+    end
+
+    return 0
+end
+
+local function findNextPlatformToBuy_NoRebirth()
+    local plants = currentPlot and currentPlot:FindFirstChild("Plants")
+    if not plants then
+        return nil
+    end
+
+    for i = 2, MAX_PLATFORM_IDX do
+        local slot = plants:FindFirstChild(tostring(i))
+        if not slot then
             break
         end
 
-        local planted = getExistingPlants(currentPlot)
-        local tile = pickEmptyThenAny(tiles)
-
-        if tile and tile:GetAttribute("CanPlace") then
-            -- ✅ ถ้าวางได้ ค่อยทำงานต่อ
-            local seed = "Cactus Seed"
-            local tool = EquipTool(seed)
-            if tool then
-                local char = plr.Character or plr.CharacterAdded:Wait()
-                for _ = 1, 15 do
-                    if char:FindFirstChild(tool.Name) then
-                        break
-                    end
-                    task.wait(0.05)
-                end
-
-                plant(tile, seed)
-                task.wait(PLANT_DELAY + 0.1)
-            else
-                warn("⚠️ ไม่มี Tool สำหรับ:", seed)
-            end
+        -- ข้ามช่องที่มีเงื่อนไข Rebirth
+        local reb = slot:GetAttribute("Rebirth")
+        if reb and tonumber(reb) and tonumber(reb) > 0 then
+            -- skip
         else
-            -- ❌ ถ้าวางไม่ได้ แค่ข้ามเฉย ๆ ไม่ต้อง continue
-            warn("⚠️ Tile นี้วางไม่ได้ ข้าม")
-        end
-    end
-    task.wait(15)
-    local brainrod = "Noobini Bananini"
-    local tool = EquipTool(brainrod)
-    if tool then
-        local char = plr.Character or plr.CharacterAdded:Wait()
-        for _ = 1, 15 do
-            if char:FindFirstChild(tool.Name) then
-                break
+            local price = getPlatformPrice(slot)
+            -- ถ้ายังมีราคา > 0 แปลว่ายังไม่ได้ซื้อ
+            if price and price > 0 then
+                return i, price
             end
-            task.wait(0.05)
         end
-    else
-        warn("⚠️ ไม่มี Tool สำหรับ:", brainrod)
     end
-    brainrodspart(currentPlot)
-    Walk(BrainrotPos)
-    task.wait(1)
-    vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-    task.wait(2)
-    vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-    task.wait(1)
-    Walk(plpos)
-    sendText("ผ่าน Tutorial แล้ว!", "AutoPlanter Bot")
+    return nil
 end
 
--- ใช้ที่ไหนก็ได้หลังจากประกาศ plr = Players.LocalPlayer แล้ว
-local function getBestBrainrot()
-    local best = nil
-    local holders = {plr.Backpack, plr.Character} -- เผื่อถืออยู่ในมือ
+local function tryBuyNextPlatform_NoWalk()
+    local idx, price = findNextPlatformToBuy_NoRebirth()
+    if not idx then
+        return false
+    end
+    local money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
+    if money < price then
+        sendEmbed("🧱 ซื้อแพลตฟอร์ม", ("ยังซื้อ **#%d** ไม่ได้ (ต้องการ $%s)"):format(idx, tostring(price)), 0xFAA61A)
+        return false
+    end
+    EquipBestBrainrot() -- บางเกมเช็ก state
+    local ok, err =
+        pcall(
+        function()
+            RS.Remotes.BuyPlatform:FireServer(tostring(idx))
+        end
+    )
+    if ok then
+        sendEmbed("🧱 ซื้อแพลตฟอร์มสำเร็จ", ("ซื้อช่อง **#%d** ราคา **$%s**"):format(idx, tostring(price)), 0x57F287)
+    else
+        sendEmbed("🧱 ซื้อแพลตฟอร์มล้มเหลว", "```" .. tostring(err) .. "```", 0xED4245)
+    end
+    return ok
+end
 
-    for _, container in ipairs(holders) do
-        if container then
-            for _, tool in ipairs(container:GetChildren()) do
-                if tool:IsA("Tool") then
-                    local isBrainrot = tool:GetAttribute("Brainrot") -- string ชื่อเช่น "Boneca Ambalabu" หรือ boolean ก็ได้
-                    local itemName = tool:GetAttribute("ItemName") or tool.Name
-                    local worthAttr = tool:GetAttribute("Worth") -- อาจเป็น number หรือ string
-                    local worth = tonumber(worthAttr) or 0
+-- ===== COLLECT MONEY: เดินเหยียบ Center ของทุกแพลตฟอร์มที่เป็นของเราแล้ว =====
+local function collectMoneyOnAllCenters(options)
+    options = options or {}
+    local dwell = options.dwell or 0.35
+    local doJump = (options.jump == nil) and true or options.jump
+    local maxIdx = options.maxIdx or MAX_PLATFORM_IDX
 
-                    if isBrainrot and worth > 0 then
-                        if not best or worth > best.Worth then
-                            best = {
-                                Instance = tool, -- ตัว tool จริง (จะ equip ต่อก็ได้)
-                                Brainrot = isBrainrot, -- ชื่อ brainrot ที่อยู่ใน attribute
-                                ItemName = itemName, -- ชื่อที่ต้องการแสดง/เก็บ
-                                Worth = worth -- มูลค่า
-                            }
-                        end
-                    end
+    local plants = currentPlot and currentPlot:FindFirstChild("Plants")
+    if not plants then
+        return
+    end
+    local character = plr.Character or plr.CharacterAdded:Wait()
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+    if not humanoid then
+        return
+    end
+
+    local moneyBefore = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
+    local visited, skippedRebirth = 0, 0
+
+    for i = 1, maxIdx do
+        local slot = plants:FindFirstChild(tostring(i))
+        if not slot then
+            break
+        end
+        local owned, reason = isPlatformOwned(slot)
+        if owned then
+            local center = slot:FindFirstChild("Center")
+            if center and center:IsA("BasePart") then
+                humanoid:MoveTo(center.Position)
+                humanoid.MoveToFinished:Wait()
+                if doJump then
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
+                    task.wait(0.05)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                 end
+                visited = visited + 1
+                task.wait(dwell)
             end
+        elseif reason == "rebirth" then
+            skippedRebirth = skippedRebirth + 1
         end
     end
 
-    -- เก็บไว้เป็นตัวแปรให้เรียกใช้สะดวก
-    if best then
-        getgenv().BestBrainrotItemName = best.ItemName
-        getgenv().BestBrainrotWorth = best.Worth
-    else
-        getgenv().BestBrainrotItemName = nil
-        getgenv().BestBrainrotWorth = nil
-    end
+    local moneyAfter = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or moneyBefore
+    local gain = moneyAfter - moneyBefore
+    sendEmbed(
+        "💰 เก็บเงินจาก Brainrot",
+        ("เดินเก็บครบ **%d จุด**, ข้าม Rebirth **%d**\nได้เงินเพิ่ม **$%s** (รวมปัจจุบัน $%s)"):format(
+            visited,
+            skippedRebirth,
+            tostring(gain),
+            tostring(moneyAfter)
+        ),
+        0xFEE75C
+    )
+end
 
-    return best
-end
-local function BuyPlatBrainrod(num)
-    local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyPlatform")
-    BuyItem:FireServer(num)
-end
+-- ===== MAIN LOOP (ทุกอย่างรวมไว้ที่นี่) =====
+local lastCollect = tick()
+sendText("🔁 เริ่ม Auto PvB (No-Walk + Webhook + Collect/1min)")
+
 while _G.Enabled do
-    local Money = game:GetService("Players").LocalPlayer.leaderstats.Money.Value
-    if currentPlot.Plants["2"].PlatformPrice then
-        if Money < 100 then
-            Walk(currentPlot.Plants["1"].Center.Position)
-            while Money < 100 do
-                vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
-                task.wait(0.1)
-                vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
-                task.wait(10)
-                print(Money)
-            end
-        elseif Money > 100 then
-            local best = getBestBrainrot()
-            if best then
-                print(("Best Brainrot: %s (Worth=%s)"):format(best.ItemName, best.Worth))
-            else
-                warn("ไม่พบ Brainrot ในกระเป๋า/มือ")
-            end
-            EquipTool(getgenv().BestBrainrotItemName)
-            Walk(currentPlot.Plants["2"].Center.Position)
-            BuyPlatBrainrod("2")
-        end
+    local money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
+
+    -- 1) ซื้อเมล็ดที่แพงสุดที่ซื้อไหวผ่าน Remote
+    local shop = readSeedShop()
+    local best = pickBestAffordableSeed(money, shop)
+    if best then
+        BuySeed(best.SeedName)
     end
+
+    -- 2) ปลูกตามจำนวนเมล็ดที่มีจริง
+    plantOwnedSeeds()
+
+    -- 3) เดินเก็บเงินเฉพาะเมื่อครบเวลา (ทุก COLLECT_INTERVAL วินาที)
+    if tick() - lastCollect >= COLLECT_INTERVAL then
+        collectMoneyOnAllCenters({dwell = 0.35, jump = true, maxIdx = MAX_PLATFORM_IDX})
+        lastCollect = tick()
+    end
+
+    -- 4) ลองซื้อแพลตฟอร์มถัดไป (ข้ามช่องที่มี Rebirth)
+    tryBuyNextPlatform_NoWalk()
+
+    task.wait(1)
 end
+
+sendText("⏹ หยุด Auto PvB")
