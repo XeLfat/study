@@ -94,63 +94,6 @@ while not Findplot() do
 end
 
 -- ===== TILE & PLANT HELPERS =====
--- มี brainrot ใน Backpack/มือไหม
-local function hasAnyBrainrotTool()
-    local holders = {plr.Backpack, plr.Character}
-    for _, container in ipairs(holders) do
-        if container then
-            for _, tool in ipairs(container:GetChildren()) do
-                if tool:IsA("Tool") then
-                    -- เกมนี้มี Attribute "Brainrot" (เคยใช้แล้ว)
-                    local isBrainrot = tool:GetAttribute("Brainrot")
-                    if isBrainrot then
-                        return true
-                    end
-                end
-            end
-        end
-    end
-    return false
-end
--- เรียก EquipBestBrainrots แบบรอให้มี brainrot จริงก่อน (สูงสุด maxWait วิ)
-local function EquipBestBrainrotSafe(maxWait)
-    maxWait = maxWait or 8
-    if hasAnyBrainrotTool() then
-        pcall(
-            function()
-                RS.Remotes.EquipBestBrainrots:FireServer()
-            end
-        )
-        return true
-    end
-
-    -- รอแบบ event-driven (เร็วกว่า sleep เฉย ๆ)
-    local got = false
-    local function onAdded(inst)
-        if inst and inst:IsA("Tool") and inst:GetAttribute("Brainrot") then
-            got = true
-            pcall(
-                function()
-                    RS.Remotes.EquipBestBrainrots:FireServer()
-                end
-            )
-        end
-    end
-
-    local c1 = plr.Backpack.ChildAdded:Connect(onAdded)
-    local char = plr.Character or plr.CharacterAdded:Wait()
-    local c2 = char.ChildAdded:Connect(onAdded)
-
-    local t0 = tick()
-    while (not got) and (tick() - t0 < maxWait) do
-        task.wait(0.1)
-    end
-
-    c1:Disconnect()
-    c2:Disconnect()
-    return got
-end
-
 local function getGrassTiles(plot)
     local tiles, rows = {}, plot and plot:FindFirstChild("Rows")
     if not rows then
@@ -948,6 +891,7 @@ local function runTutorialOnce()
     plantOneIfPossible()
 
     -- 4) ใช้ EquipBestBrainrots ได้เลย
+    task.wait(30)
     pcall(
         function()
             RS.Remotes.EquipBestBrainrots:FireServer()
@@ -956,23 +900,6 @@ local function runTutorialOnce()
 
     sendEmbed("✅ จบ Tutorial", "เสร็จสิ้น 4 ขั้นตอน พร้อมเข้าระบบอัตโนมัติหลัก", 0x57F287)
 end
--- เมื่อตายแล้วเด้งของเข้า Backpack/มือ ให้ equip best ทันที
-local function setupAutoEquipOnPickup()
-    local function try(inst)
-        if inst and inst:IsA("Tool") and inst:GetAttribute("Brainrot") then
-            -- หน่วงนิดให้ไอเท็ม set Attribute ครบ
-            task.wait(0.15)
-            pcall(
-                function()
-                    RS.Remotes.EquipBestBrainrots:FireServer()
-                end
-            )
-        end
-    end
-    plr.Backpack.ChildAdded:Connect(try)(plr.Character or plr.CharacterAdded:Wait()).ChildAdded:Connect(try)
-end
-
-setupAutoEquipOnPickup()
 
 -- ===== MAIN LOOP =====
 local lastCollect = tick()
@@ -1058,14 +985,6 @@ while _G.Enabled do
     if cap > lastCap then
         sendEmbed("📈 เพิ่มความจุปลูก", ("จาก **%d** → **%d** ต้น"):format(lastCap, cap), 0x00FFFF)
         lastCap = cap
-    end
-    -- สำรอง: ถ้ามี brainrot ในกระเป๋าแต่ยังไม่ได้สั่ง equip best ให้สั่งเป็นระยะ
-    if hasAnyBrainrotTool() then
-        pcall(
-            function()
-                RS.Remotes.EquipBestBrainrots:FireServer()
-            end
-        )
     end
 
     task.wait(1)
