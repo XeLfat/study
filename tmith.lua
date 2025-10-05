@@ -750,6 +750,53 @@ local function collectMoneyOnAllCenters(options)
     )
 end
 -- === TUTORIAL HELPERS ===
+-- มี Brainrot ใน Backpack/มือแล้วหรือยัง?
+local function hasBrainrotInInventory()
+    local containers = {plr.Backpack, plr.Character}
+    for _, bag in ipairs(containers) do
+        if bag then
+            for _, tool in ipairs(bag:GetChildren()) do
+                if tool:IsA("Tool") then
+                    local attrName = tool:GetAttribute("Brainrot")
+                    local itemName = tool:GetAttribute("ItemName") or tool.Name
+                    -- บางเกมตั้งเป็น boolean, บางเกมตั้งเป็น string ชื่อ brainrot
+                    if attrName == true or (type(attrName)=="string" and attrName~="") then
+                        return true, itemName
+                    end
+                end
+            end
+        end
+    end
+    return false, nil
+end
+
+-- รอจนกว่าจะมี Brainrot (เช็คทุก interval วินาที ที่สุดไม่เกิน timeoutSec)
+local function waitForBrainrot(timeoutSec, interval)
+    timeoutSec = timeoutSec or 120     -- รอสูงสุด 2 นาที (ปรับได้)
+    interval   = interval   or 1.0     -- เช็คทุก 1 วิ
+    local t0 = tick()
+    while tick() - t0 <= timeoutSec do
+        local ok, name = hasBrainrotInInventory()
+        if ok then return true, name end
+        task.wait(interval)
+    end
+    return false, nil
+end
+
+-- เรียก EquipBestBrainrots ถ้าและเฉพาะเมื่อเรามี Brainrot แล้วเท่านั้น
+local function ensureEquipBestBrainrots()
+    local ok, name = hasBrainrotInInventory()
+    if not ok then return false end
+    local succeeded, err = pcall(function()
+        RS.Remotes.EquipBestBrainrots:FireServer()
+    end)
+    if succeeded then
+        sendEmbed("🧠 Equip Brainrot", "เรียกใช้ **EquipBestBrainrots** (มี Brainrot อยู่แล้ว)", 0x57F287)
+    else
+        sendEmbed("🧠 Equip Brainrot ล้มเหลว", "```"..tostring(err).."```", 0xED4245)
+    end
+    return succeeded
+end
 local function getHumanoid()
     local char = plr.Character or plr.CharacterAdded:Wait()
     return char:FindFirstChildOfClass("Humanoid")
@@ -891,14 +938,13 @@ local function runTutorialOnce()
     -- 3) ปลูก 1 ต้น
     plantOneIfPossible()
 
-    -- 4) ใช้ EquipBestBrainrots ได้เลย
-    pcall(
-        function()
-            task.wait(30)
-
-            RS.Remotes.EquipBestBrainrots:FireServer()
-        end
-    )
+    -- 4) รอให้ได้ Brainrot ก่อน แล้วค่อย EquipBestBrainrots
+local gotBR = select(1, waitForBrainrot(180, 1.0))  -- รอสูงสุด 3 นาที (ปรับได้)
+if gotBR then
+    ensureEquipBestBrainrots()
+else
+    sendEmbed("⏳ ยังไม่มี Brainrot", "ข้ามการ Equip ใน Tutorial (จะไปลอง Equip ในลูปหลักแทน)", 0xFAA61A)
+end
 
     sendEmbed("✅ จบ Tutorial", "เสร็จสิ้น 4 ขั้นตอน พร้อมเข้าระบบอัตโนมัติหลัก", 0x57F287)
 end
