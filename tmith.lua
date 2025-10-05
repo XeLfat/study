@@ -473,6 +473,7 @@ while _G.Enabled do
                 task.wait(0.1)
                 vim:SendKeyEvent(false, Enum.KeyCode.Space, false, game)
                 task.wait(10)
+                print(Money)
             end
         elseif Money > 100 then
             local best = getBestBrainrot()
