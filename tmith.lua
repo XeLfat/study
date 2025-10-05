@@ -548,18 +548,64 @@ local function collectMoneyOnAllCenters(options)
     )
 end
 
+-- อ่านราคา + stock จาก UI ร้าน (กันร้านปิด/ยังไม่โหลด)
+local function getAvailableSeeds()
+    local main = plr.PlayerGui:FindFirstChild("Main")
+    local seedsUI = main and main:FindFirstChild("Seeds")
+    local frame = seedsUI and seedsUI:FindFirstChild("Frame")
+    local scrolling = frame and frame:FindFirstChild("ScrollingFrame")
+    if not scrolling then
+        return {}
+    end
+
+    local list = {}
+    for _, seedFrame in ipairs(scrolling:GetChildren()) do
+        if seedFrame:IsA("Frame") and seedFrame:FindFirstChild("Buttons") then
+            local name = seedFrame.Name
+            local buy = seedFrame.Buttons:FindFirstChild("Buy")
+            local priceLabel = buy and buy:FindFirstChild("TextLabel")
+            local stockLabel = seedFrame:FindFirstChild("Stock")
+            if priceLabel and stockLabel then
+                local price = parsePrice(priceLabel.Text)
+                local stock = tonumber((stockLabel.Text or ""):match("x(%d+)")) or 0
+                if stock > 0 then
+                    table.insert(list, {Name = name, Price = price, Stock = stock})
+                end
+            end
+        end
+    end
+    table.sort(
+        list,
+        function(a, b)
+            return a.Price > b.Price
+        end
+    ) -- แพง -> ถูก
+    return list
+end
+
 -- ===== MAIN LOOP (ทุกอย่างรวมไว้ที่นี่) =====
 local lastCollect = tick()
 sendText("🔁 เริ่ม Auto PvB (No-Walk + Webhook + Collect/1min)")
 
 while _G.Enabled do
+    -- 1) ซื้อเมล็ดที่แพงสุดที่ซื้อไหว (เช็กจาก GUI โดยตรง + มีสต็อก)
+    local seeds = getAvailableSeeds()
     local money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
 
-    -- 1) ซื้อเมล็ดที่แพงสุดที่ซื้อไหวผ่าน Remote
-    local shop = readSeedShop()
-    local best = pickBestAffordableSeed(money, shop)
-    if best then
-        BuySeed(best.SeedName)
+    for _, seed in ipairs(seeds) do
+        if money >= seed.Price then
+            print(("🪴 ซื้อ %s ราคา $%d (เหลือ %d ชิ้น)"):format(seed.Name, seed.Price, seed.Stock))
+            BuySeed(seed.Name)
+            sendEmbed(
+                "🪴 ซื้อเมล็ดใหม่",
+                ("ซื้อ **%s** ราคา `$%d`\nเหลือในร้าน `%d` ชิ้น"):format(seed.Name, seed.Price, seed.Stock),
+                0x00FF00
+            )
+            task.wait(0.3)
+            -- รีเฟรชเงินทันที เผื่อซื้อหลายรอบในอนาคต
+            money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or money
+            break -- ซื้อแค่ชนิดเดียวต่อรอบ
+        end
     end
 
     -- 2) ปลูกตามจำนวนเมล็ดที่มีจริง
