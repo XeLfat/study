@@ -466,7 +466,7 @@ end
 while _G.Enabled do
     local Money = game:GetService("Players").LocalPlayer.leaderstats.Money.Value
 
-    if currentPlot.Plants["2"].PlatformPrice then
+    if currentPlot.Brainrots["2"].PlatformPrice then
         if Money < 100 then
             Walk(BrainrotPos)
             while Money < 100 do
@@ -483,7 +483,7 @@ while _G.Enabled do
                 warn("ไม่พบ Brainrot ในกระเป๋า/มือ")
             end
             EquipTool(getgenv().BestBrainrotItemName)
-            Walk(currentPlot.Plants["2"].Center.Position)
+            Walk(currentPlot.Brainrots["2"].Center.Position)
             BuyPlatBrainrod("2")
         end
     end
