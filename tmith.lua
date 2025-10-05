@@ -883,10 +883,11 @@ local function runTutorialOnce()
         VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
         task.wait(0.5)
     end
+    task.wait(1)
 
     -- 2) ซื้อ seed อย่างน้อย 1 ซอง (จะรอเงินถ้าถึงใน 5 นาที)
     buyAnySeedOnce()
-
+    task.wait(1)
     -- 3) ปลูก 1 ต้น
     plantOneIfPossible()
 
