@@ -1,6 +1,4 @@
 -- ===== CONFIG =====
-local ITEM_NAME = "Cactus"
-local ITEM_ID = "c67c7669-6c8b-4ecb-9c67-44aba3c7a3d6"
 local PLANT_DELAY = 1.2
 local WEBHOOK_URL =
     "https://discord.com/api/webhooks/1392662642543427665/auxuNuldvu2l5GfGqCr4dpQCw_OdJCIFLaGhdTOn4Vq1ZMXixiGE6yMLCAAUW83GOXTi"
@@ -11,8 +9,6 @@ local plr = Players.LocalPlayer
 local Tutorial = plr.PlayerGui.HUD:WaitForChild("Tutorial")
 local Plots = workspace.Plots
 local RS = game:GetService("ReplicatedStorage")
-local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyItem")
-local PlaceItem = RS:WaitForChild("Remotes"):WaitForChild("PlaceItem")
 local vim = game:GetService("VirtualInputManager")
 local currentPlot = nil
 local GeorgePos = nil
@@ -116,6 +112,7 @@ local function FindGeorge()
 end
 
 local function BuySeed(seedName)
+    local BuyItem = RS:WaitForChild("Remotes"):WaitForChild("BuyItem")
     BuyItem:FireServer(seedName)
 end
 
@@ -160,7 +157,7 @@ local function getExistingPlants(plot)
     for _, p in ipairs(plantsFolder:GetChildren()) do
         if p:GetAttribute("Owner") == plr.Name then
             local pos = p:GetAttribute("Position")
-            local size = p:GetAttribute("Size") or 1
+            local size = p:GetAttribute("Size")
             if typeof(pos) == "Vector3" then
                 table.insert(plants, {position = pos, size = size})
             end
@@ -217,7 +214,7 @@ local function pickEmptyThenAny(tiles)
     return list[math.random(1, #list)]
 end
 
-local function findLatestCactusId(seed)
+local function findLatesId(seed)
     -- 1) หาใน Backpack / Character (บางเกมยัด Attribute "ID" ไว้ที่ Tool)
     local containers = {plr.Backpack, plr.Character}
     for _, container in ipairs(containers) do
@@ -271,7 +268,7 @@ local function EquipTool(toolItemName) -- ใช้ Attribute ItemName เช่
 end
 local function plant(tile, seed)
     -- หา ID ล่าสุดของเมล็ด (จาก Backpack / Character)
-    local id = findLatestCactusId(seed)
+    local id = findLatesId(seed)
     if not id then
         warn("❌ หา ID ของ " .. seed .. " ไม่เจอ")
         return
@@ -328,7 +325,8 @@ local function brainrodspart(plot)
     end
     for _, brainrot in ipairs(brainrots:GetChildren()) do
         local Enabled = brainrot:GetAttribute("Enabled")
-        if Enabled then
+        local HaveBrainrot = brainrot:GetAttribute("Money")
+        if Enabled and not HaveBrainrot then
             local brainrotbase = brainrot
             for _, v in ipairs(brainrotbase:GetChildren()) do
                 if v:IsA("BasePart") and v.Name == "Center" then
