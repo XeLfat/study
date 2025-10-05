@@ -467,6 +467,8 @@ while _G.Enabled do
     local Money = game:GetService("Players").LocalPlayer.leaderstats.Money.Value
     if currentPlot.Plants["2"].PlatformPrice then
         if Money < 100 then
+            brainrodspart(currentPlot)
+
             Walk(BrainrotPos)
             while Money < 100 do
                 vim:SendKeyEvent(true, Enum.KeyCode.Space, false, game)
