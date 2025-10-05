@@ -891,9 +891,10 @@ local function runTutorialOnce()
     plantOneIfPossible()
 
     -- 4) ใช้ EquipBestBrainrots ได้เลย
-    task.wait(30)
     pcall(
         function()
+            task.wait(30)
+
             RS.Remotes.EquipBestBrainrots:FireServer()
         end
     )
