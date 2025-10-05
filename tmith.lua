@@ -749,12 +749,168 @@ local function collectMoneyOnAllCenters(options)
         0xFEE75C
     )
 end
+-- === TUTORIAL HELPERS ===
+local function getHumanoid()
+    local char = plr.Character or plr.CharacterAdded:Wait()
+    return char:FindFirstChildOfClass("Humanoid")
+end
+
+local function Walk(targetPosition, timeout)
+    timeout = timeout or 8
+    local hum = getHumanoid()
+    if not hum then
+        return
+    end
+    hum:MoveTo(targetPosition)
+    local t0 = tick()
+    while tick() - t0 < timeout do
+        if hum.RootPart and (hum.RootPart.Position - targetPosition).Magnitude < 3 then
+            break
+        end
+        if hum.MoveToFinished:Wait(0.25) then
+            break
+        end
+        hum:MoveTo(targetPosition)
+    end
+end
+
+-- ระบุตำแหน่ง George ใน plot ของเรา
+local function getGeorgePos()
+    if not currentPlot then
+        return nil
+    end
+    local root =
+        currentPlot:FindFirstChild("NPCs") and currentPlot.NPCs:FindFirstChild("George") and
+        currentPlot.NPCs.George:FindFirstChild("HumanoidRootPart")
+    if not root then
+        return nil
+    end
+    return root.Position + Vector3.new(4, 0, 0) -- ยืนเยื้อง ๆ แล้วกด E
+end
+
+-- เช็คว่าเป็นไอดีใหม่/ยังต้องทำ Tutorial ไหม
+local function needsTutorial()
+    -- 1) มี GUI Tutorial โผล่?
+    local hud = plr.PlayerGui:FindFirstChild("HUD")
+    local tut = hud and hud:FindFirstChild("Tutorial")
+    if tut and tut.Visible then
+        return true
+    end
+
+    -- 2) ยังไม่มีพืชปลูกเลย?
+    local plants = currentPlot and currentPlot:FindFirstChild("Plants")
+    if plants and #plants:GetChildren() == 0 then
+        -- และยังไม่มี Brainrot ใส่แพลตฟอร์มเลย (หยาบ ๆ)
+        return true
+    end
+
+    return false
+end
+
+-- ซื้อ seed ตัวใดก็ได้อย่างน้อย 1 ซองจากร้าน (เลือกตัวถูกสุดที่มีสต็อก)
+local function buyAnySeedOnce()
+    local seeds = getAvailableSeeds()
+    if #seeds == 0 then
+        return false
+    end
+    -- เรียงถูกสุดหน้า-หลังเพื่อให้ซื้อได้ชัวร์
+    table.sort(
+        seeds,
+        function(a, b)
+            return a.Price < b.Price
+        end
+    )
+    local money = (plr.leaderstats and plr.leaderstats.Money and plr.leaderstats.Money.Value) or 0
+    for _, s in ipairs(seeds) do
+        if s.Stock > 0 and s.Price > 0 then
+            if money >= s.Price then
+                return BuySeed(s.Name)
+            else
+                -- ถ้าถึงใน 5 นาที ให้รอ (ตามนโยบายคุณ)
+                local okWait = select(1, shouldWaitFor(s.Price, 300))
+                if okWait and waitUntilAffordable(s.Price, 300) then
+                    return BuySeed(s.Name)
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- ปลูก 1 ต้น (ใช้ seed ที่มีอยู่ในตัว)
+local function plantOneIfPossible()
+    local seeds = getOwnedSeeds()
+    if #seeds == 0 then
+        return false
+    end
+    local tiles = getGrassTiles(currentPlot)
+    if #tiles == 0 then
+        return false
+    end
+    local free = select(1, getFreePlantSlots())
+    if free <= 0 then
+        return false
+    end
+
+    local s = seeds[1]
+    if not EquipTool(s.Name) then
+        return false
+    end
+    local t = pickEmptyThenAny(tiles)
+    if not (t and t:GetAttribute("CanPlace")) then
+        return false
+    end
+    plant(t, s.Name)
+    task.wait(PLANT_DELAY + 0.1)
+    return true
+end
+
+-- ทำ Tutorial ครั้งเดียวตามลำดับ: เดินหา George → กด E → ซื้อ → ปลูก → EquipBestBrainrots
+local function runTutorialOnce()
+    sendEmbed(
+        "📘 เริ่ม Tutorial",
+        "กำลังทำตามขั้นตอนอัตโนมัติ 1) เดินหา George → 2) ซื้อเมล็ด → 3) ปลูก → 4) EquipBestBrainrots",
+        0x5865F2
+    )
+
+    -- 1) ไปหา George แล้วกด E
+    local gpos = getGeorgePos()
+    if gpos then
+        Walk(gpos, 10)
+        task.wait(0.2)
+        VIM:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+        task.wait(0.15)
+        VIM:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+        task.wait(0.5)
+    end
+
+    -- 2) ซื้อ seed อย่างน้อย 1 ซอง (จะรอเงินถ้าถึงใน 5 นาที)
+    buyAnySeedOnce()
+
+    -- 3) ปลูก 1 ต้น
+    plantOneIfPossible()
+
+    -- 4) ใช้ EquipBestBrainrots ได้เลย
+    pcall(
+        function()
+            RS.Remotes.EquipBestBrainrots:FireServer()
+        end
+    )
+
+    sendEmbed("✅ จบ Tutorial", "เสร็จสิ้น 4 ขั้นตอน พร้อมเข้าระบบอัตโนมัติหลัก", 0x57F287)
+end
 
 -- ===== MAIN LOOP =====
 local lastCollect = tick()
 local lastCap = getPlantCapacity()
 RS.Remotes.AutoSell:FireServer("Rare")
 RS.Remotes.AutoSell:FireServer("Epic")
+-- === TUTORIAL AUTO RUN (one-shot) ===
+if needsTutorial() then
+    -- ให้เกมโหลด plot/GUI ให้พร้อมก่อน
+    task.wait(1)
+    pcall(runTutorialOnce)
+end
 
 sendText("🔁 เริ่ม Auto PvB")
 
