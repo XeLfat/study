@@ -753,6 +753,9 @@ end
 -- ===== MAIN LOOP =====
 local lastCollect = tick()
 local lastCap = getPlantCapacity()
+RS.Remotes.AutoSell:FireServer("Rare")
+RS.Remotes.AutoSell:FireServer("Epic")
+
 sendText("🔁 เริ่ม Auto PvB")
 
 while _G.Enabled do
